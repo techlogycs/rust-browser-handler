@@ -1,8 +1,10 @@
+#[cfg(windows)]
 use log::warn;
 use std::collections::HashMap;
 use std::collections::HashSet;
 use std::env;
 use std::path::{Path, PathBuf};
+#[cfg(windows)]
 use winreg::{RegKey, enums::*};
 
 /// Mapping from executable file names to official browser names
@@ -27,6 +29,7 @@ pub fn get_browser_map() -> &'static HashMap<&'static str, &'static str> {
     })
 }
 /// Helper function to extract executable path from a command string
+#[cfg(windows)]
 pub fn extract_executable_path_from_command(command: String) -> Option<String> {
     let trimmed_command = command.trim();
     if let Some(stripped) = trimmed_command.strip_prefix('"') {
@@ -45,6 +48,7 @@ pub fn extract_executable_path_from_command(command: String) -> Option<String> {
 }
 
 /// Helper function to check if a path likely points to a browser executable
+#[cfg(windows)]
 pub fn is_browser_executable(path: &str) -> bool {
     let lower_path = path.to_ascii_lowercase();
     // Only check the file name part
@@ -142,79 +146,75 @@ pub fn find_browsers() -> Vec<String> {
 
     // Check common installation paths first
     for path in generate_common_browser_paths() {
-        if path.exists() {
-            if let Some(path_str) = path.to_str() {
-                browsers.insert(path_str.to_string());
-            }
+        if path.exists()
+            && let Some(path_str) = path.to_str()
+        {
+            browsers.insert(path_str.to_string());
         }
     }
 
     // Check registry
-    let hklm = RegKey::predef(HKEY_LOCAL_MACHINE);
-    let hkcu = RegKey::predef(HKEY_CURRENT_USER);
+    #[cfg(windows)]
+    {
+        let hklm = RegKey::predef(HKEY_LOCAL_MACHINE);
+        let hkcu = RegKey::predef(HKEY_CURRENT_USER);
 
-    let registry_paths = [
-        (&hklm, "SOFTWARE\\Clients\\StartMenuInternet"),
-        (
-            &hklm,
-            "SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\App Paths",
-        ),
-        (&hkcu, "SOFTWARE\\Clients\\StartMenuInternet"),
-        (
-            &hkcu,
-            "SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\App Paths",
-        ),
-    ];
+        let registry_paths = [
+            (&hklm, "SOFTWARE\\Clients\\StartMenuInternet"),
+            (
+                &hklm,
+                "SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\App Paths",
+            ),
+            (&hkcu, "SOFTWARE\\Clients\\StartMenuInternet"),
+            (
+                &hkcu,
+                "SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\App Paths",
+            ),
+        ];
 
-    for (hive, path) in &registry_paths {
-        match hive.open_subkey(path) {
-            Ok(base_key) => {
-                for entry_result in base_key.enum_keys() {
-                    match entry_result {
-                        Ok(entry) => {
-                            match base_key.open_subkey(&entry) {
-                                Ok(entry_key) => {
-                                    // Check for shell/open/command
-                                    if let Ok(command_key) =
-                                        entry_key.open_subkey("shell\\open\\command")
-                                    {
-                                        if let Ok(command_string) =
-                                            command_key.get_value::<String, _>("")
-                                        {
-                                            if let Some(executable_path) =
+        for (hive, path) in &registry_paths {
+            match hive.open_subkey(path) {
+                Ok(base_key) => {
+                    for entry_result in base_key.enum_keys() {
+                        match entry_result {
+                            Ok(entry) => {
+                                match base_key.open_subkey(&entry) {
+                                    Ok(entry_key) => {
+                                        // Check for shell/open/command
+                                        if let Ok(command_key) =
+                                            entry_key.open_subkey("shell\\open\\command")
+                                            && let Ok(command_string) =
+                                                command_key.get_value::<String, _>("")
+                                            && let Some(executable_path) =
                                                 extract_executable_path_from_command(command_string)
-                                            {
-                                                if !executable_path.is_empty()
-                                                    && is_browser_executable(&executable_path)
-                                                {
-                                                    browsers.insert(executable_path);
-                                                }
-                                            }
+                                            && !executable_path.is_empty()
+                                            && is_browser_executable(&executable_path)
+                                        {
+                                            browsers.insert(executable_path);
+                                        }
+
+                                        // Check direct value
+                                        if let Ok(command_string) =
+                                            entry_key.get_value::<String, _>("")
+                                            && let Some(executable_path) =
+                                                extract_executable_path_from_command(command_string)
+                                            && !executable_path.is_empty()
+                                            && is_browser_executable(&executable_path)
+                                        {
+                                            browsers.insert(executable_path);
                                         }
                                     }
-
-                                    // Check direct value
-                                    if let Ok(command_string) = entry_key.get_value::<String, _>("")
-                                    {
-                                        if let Some(executable_path) =
-                                            extract_executable_path_from_command(command_string)
-                                        {
-                                            if !executable_path.is_empty()
-                                                && is_browser_executable(&executable_path)
-                                            {
-                                                browsers.insert(executable_path);
-                                            }
-                                        }
+                                    Err(e) => {
+                                        warn!("Failed to open registry entry '{}': {}", entry, e)
                                     }
                                 }
-                                Err(e) => warn!("Failed to open registry entry '{}': {}", entry, e),
                             }
+                            Err(e) => warn!("Failed to enumerate registry entry: {}", e),
                         }
-                        Err(e) => warn!("Failed to enumerate registry entry: {}", e),
                     }
                 }
+                Err(e) => warn!("Failed to open registry path '{}': {}", path, e),
             }
-            Err(e) => warn!("Failed to open registry path '{}': {}", path, e),
         }
     }
 

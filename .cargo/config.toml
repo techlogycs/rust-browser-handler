@@ -1,6 +1,6 @@
 [alias]
 # Set up development environment
-setup-dev = "run --manifest-path .cargo/setup-dev/Cargo.toml"
+setup-dev = "run --manifest-path .cargo/setup-dev/Cargo.toml --bin setup-dev"
 
 # Development aliases
 dev = "watch -x run"

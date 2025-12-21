@@ -14,8 +14,8 @@ fn main() {
     
     // 2. Install pre-commit hook from repository
     if let Err(e) = install_precommit_hook() {
-        eprintln!("❌ Failed to install pre-commit hook: {}", e);
-        std::process::exit(1);
+        eprintln!("⚠️  Failed to install pre-commit hook: {} (continuing setup)", e);
+        // Don't exit, just warn
     }
     
     // 3. Install required development tools
@@ -26,7 +26,7 @@ fn main() {
     
     println!("✅ Development environment setup complete!");
     println!("🚀 You can now start developing with:");
-    println!("   - cargo build        # Build the project");
+    println!("   - cargo build --target x86_64-pc-windows-gnu        # Build the project");
     println!("   - cargo test         # Run tests");
     println!("   - cargo run          # Run the application");
     println!("   - cargo dev          # Auto-rebuild and run on file changes");
@@ -71,7 +71,9 @@ fn install_precommit_hook() -> io::Result<()> {
         use std::os::unix::fs::PermissionsExt;
         let mut perms = fs::metadata(&target_path)?.permissions();
         perms.set_mode(0o755); // rwxr-xr-x
-        fs::set_permissions(&target_path, perms)?;
+        if let Err(e) = fs::set_permissions(&target_path, perms) {
+            eprintln!("⚠️  Could not set executable permissions on pre-commit hook: {} (hook may still work)", e);
+        }
     }
     
     println!("✅ Pre-commit hook installed successfully!");

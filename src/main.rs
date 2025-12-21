@@ -361,7 +361,7 @@ fn parse_interactive_command(input: &str) -> Result<Commands, &'static str> {
             }
             let pattern = parts[1].to_string();
             let browser = parts[2].to_string();
-            let regex = parts.iter().any(|&p| p == "--regex");
+            let regex = parts.contains(&"--regex");
             Ok(Commands::Add {
                 pattern,
                 browser,

@@ -1,13 +1,17 @@
+#[cfg(windows)]
 use log::{info, warn};
+#[cfg(windows)]
 use std::io;
+#[cfg(windows)]
 use winreg::{RegKey, enums::*};
 
+#[cfg(windows)]
 pub fn set_as_default_handler() -> io::Result<()> {
     info!("Attempting to register as default browser handler...");
 
     let exe_path = std::env::current_exe()?
         .to_str()
-        .ok_or_else(|| io::Error::new(io::ErrorKind::Other, "Failed to get executable path"))?
+        .ok_or_else(|| io::Error::other("Failed to get executable path"))?
         .to_string();
 
     // Register custom URL scheme (rust-browser-handler)
@@ -68,6 +72,7 @@ pub fn set_as_default_handler() -> io::Result<()> {
     Ok(())
 }
 
+#[cfg(windows)]
 pub fn unregister_handler() -> io::Result<()> {
     info!("Attempting to unregister as default browser handler...");
 
@@ -121,4 +126,23 @@ pub fn unregister_handler() -> io::Result<()> {
     );
 
     Ok(())
+}
+
+#[cfg(not(windows))]
+use std::io;
+
+#[cfg(not(windows))]
+pub fn set_as_default_handler() -> io::Result<()> {
+    Err(io::Error::new(
+        io::ErrorKind::Unsupported,
+        "This application only supports Windows for default browser registration",
+    ))
+}
+
+#[cfg(not(windows))]
+pub fn unregister_handler() -> io::Result<()> {
+    Err(io::Error::new(
+        io::ErrorKind::Unsupported,
+        "This application only supports Windows for default browser unregistration",
+    ))
 }

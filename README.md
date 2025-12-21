@@ -50,17 +50,19 @@ If `is_regex` is not specified, the rule defaults to substring matching.
 To build the release version of the application, navigate to the project directory in your terminal and run:
 
 ```bash
-cargo build --release
+cargo build --release --target x86_64-pc-windows-gnu
 ```
 
-This will generate an executable file (likely `rust_browser_handler.exe` in the `target/release/` directory).
+This will generate an executable file (likely `rust_browser_handler.exe` in the `target/x86_64-pc-windows-gnu/release/` directory).
+
+**Note:** This project requires cross-compilation from Linux to Windows due to Windows-specific dependencies. The devcontainer is configured for this automatically.
 
 ### Registration
 
 To register the application as the default handler for http and https protocols, run the executable with the `register` subcommand:
 
 ```bash
-target\release\rust_browser_handler.exe register
+target\x86_64-pc-windows-gnu\release\rust_browser_handler.exe register
 ```
 
 Alternatively, you can run the executable without arguments to enter interactive mode and use the `register` command there.
@@ -75,31 +77,31 @@ You can manage rules using the command-line interface in two ways:
 
     ```bash
     # Add a rule (substring match)
-    target\release\rust_browser_handler.exe add "work.com" "C:\Program Files\Google\Chrome\Application\chrome.exe"
+    target\x86_64-pc-windows-gnu\release\rust_browser_handler.exe add "work.com" "C:\Program Files\Google\Chrome\Application\chrome.exe"
 
     # Add a rule (regex match)
-    target\release\rust_browser_handler.exe add ".*\.internal\.net" "C:\Program Files\Mozilla Firefox\firefox.exe" --regex
+    target\x86_64-pc-windows-gnu\release\rust_browser_handler.exe add ".*\.internal\.net" "C:\Program Files\Mozilla Firefox\firefox.exe" --regex
 
     # List all rules
-    target\release\rust_browser_handler.exe list
+    target\x86_64-pc-windows-gnu\release\rust_browser_handler.exe list
 
     # Remove a rule by pattern
-    target\release\rust_browser_handler.exe remove "work.com"
+    target\x86_64-pc-windows-gnu\release\rust_browser_handler.exe remove "work.com"
 
     # Import rules from a file
-    target\release\rust_browser_handler.exe import "path\to\your\rules.json"
+    target\x86_64-pc-windows-gnu\release\rust_browser_handler.exe import "path\to\your\rules.json"
 
     # Export rules to a file
-    target\release\rust_browser_handler.exe export "path\to\save\rules.json"
+    target\x86_64-pc-windows-gnu\release\rust_browser_handler.exe export "path\to\save\rules.json"
 
     # Open Windows Settings to manage default handlers
-    target\release\rust_browser_handler.exe open-settings
+    target\x86_64-pc-windows-gnu\release\rust_browser_handler.exe open-settings
     ```
 
 2.  **Interactive Mode:** Run the executable without any arguments to enter an interactive mode:
 
     ```bash
-    target\release\rust_browser_handler.exe
+    target\x86_64-pc-windows-gnu\release\rust_browser_handler.exe
     ```
 
     In interactive mode, type commands like `add`, `list`, `remove`, `import`, `export`, `register`, and `exit`. Type `help` for a list of commands and their usage within the interactive mode.
@@ -121,9 +123,23 @@ Once registered, simply click on an http or https link from any application.
 
 This project uses a standardized development environment with linting, formatting, and commit message conventions.
 
+### Dev Container Setup (Recommended)
+
+This project includes a dev container configuration for a consistent development environment. To use it:
+
+1. Ensure you have VS Code with the "Dev Containers" extension installed.
+2. Open the project in VS Code.
+3. When prompted, click "Reopen in Container" or run `Dev Containers: Reopen in Container` from the command palette.
+4. The dev container will set up the Rust environment with cross-compilation support for Windows targets.
+
+The dev container includes:
+- Rust toolchain with Windows cross-compilation targets
+- MinGW cross-compiler for linking Windows binaries
+- VS Code extensions for Rust development (rust-analyzer, TOML support, LLDB debugger)
+
 ### Quick Setup
 
-After cloning this repository, run:
+After cloning this repository, the dev container will automatically run the setup. If developing locally (not recommended), run:
 
 ```bash
 cargo setup-dev
@@ -137,8 +153,8 @@ This will:
 ### Development Commands
 
 ```bash
-# Run the application
-cargo run
+# Run the application (on Windows or with cross-compilation)
+cargo run --target x86_64-pc-windows-gnu
 
 # Development mode (auto-rebuild on changes)
 cargo dev
@@ -157,6 +173,9 @@ cargo lint
 
 # Run all checks (format, lint, test)
 cargo check-all
+
+# Build for Windows release
+cargo build --release --target x86_64-pc-windows-gnu
 ```
 
 ### Commit Message Format

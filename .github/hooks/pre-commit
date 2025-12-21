@@ -1,4 +1,4 @@
-#!/bin/sh
+#!/usr/bin/bash
 # Pre-commit hook for linting Rust code
 echo "🔍 Running pre-commit linting..."
 
@@ -12,7 +12,7 @@ fi
 
 # Run clippy
 echo "🦀 Running clippy lints..."
-cargo clippy -- -D warnings
+cargo clippy --target x86_64-pc-windows-gnu -- -D warnings
 if [ $? -ne 0 ]; then
     echo "❌ Clippy check failed. Please fix the warnings."
     exit 1
