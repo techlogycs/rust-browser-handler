@@ -1,12 +1,12 @@
 mod browser_discovery;
-mod registry_handler;
+mod platform;
 mod rules;
 
 use browser_discovery::*;
 use clap::{Parser, Subcommand};
 use log::{error, info, warn};
+use platform::{Handler, PlatformHandler};
 use regex::Regex;
-use registry_handler::*;
 use rules::*;
 use std::io;
 use std::io::Write;
@@ -112,6 +112,7 @@ fn main() {
 
 // Handles all commands, regardless of how they were obtained
 fn handle_command(command: Option<Commands>, url: Option<String>) {
+    let handler = Handler;
     match command {
         Some(Commands::Add {
             pattern,
@@ -158,7 +159,7 @@ fn handle_command(command: Option<Commands>, url: Option<String>) {
         Some(Commands::Register) => {
             info!("Registering as default browser handler...");
             println!("Registering as default browser handler...");
-            match set_as_default_handler() {
+            match handler.set_as_default_handler() {
                 Ok(_) => {
                     info!("Successfully registered as default handler.");
                     println!("Successfully registered as default handler.");
@@ -171,7 +172,7 @@ fn handle_command(command: Option<Commands>, url: Option<String>) {
         }
         Some(Commands::Unregister) => {
             info!("Unregistering as default browser handler...");
-            match unregister_handler() {
+            match handler.unregister_handler() {
                 Ok(_) => {
                     info!("Successfully unregistered as default handler.");
                     println!("Successfully unregistered as default handler.");
@@ -205,6 +206,7 @@ fn handle_command(command: Option<Commands>, url: Option<String>) {
 
 // Handles opening a URL, including rule matching and browser selection
 fn handle_url_open(url: String) {
+    let handler = Handler;
     let rules = match read_rules() {
         Ok(rules) => rules,
         Err(e) => {
@@ -214,7 +216,9 @@ fn handle_url_open(url: String) {
     };
     info!("Loaded rules: {:?}", rules);
 
-    let mut browsers = find_browsers();
+    let browsers_set: std::collections::HashSet<String> =
+        handler.find_browsers().into_iter().collect();
+    let mut browsers: Vec<String> = browsers_set.into_iter().collect();
     browsers.sort();
     info!("Detected browsers: {:?}", browsers);
 
@@ -229,7 +233,7 @@ fn handle_url_open(url: String) {
                     if re.is_match(&url) {
                         matched_browser_path = browsers
                             .iter()
-                            .find(|browser_path| {
+                            .find(|browser_path: &&String| {
                                 browser_path
                                     .to_lowercase()
                                     .contains(&rule.browser.to_lowercase())
@@ -247,7 +251,7 @@ fn handle_url_open(url: String) {
         } else if url.contains(&rule.pattern) {
             matched_browser_path = browsers
                 .iter()
-                .find(|browser_path| {
+                .find(|browser_path: &&String| {
                     browser_path
                         .to_lowercase()
                         .contains(&rule.browser.to_lowercase())
@@ -273,6 +277,7 @@ fn handle_url_open(url: String) {
         if browsers.is_empty() {
             error!("No browsers detected to open the URL.");
         } else {
+            println!("URL: {}", url);
             info!("Detected browsers:");
             for (i, browser_path) in browsers.iter().enumerate() {
                 let browser_name = get_browser_name_from_path(browser_path);

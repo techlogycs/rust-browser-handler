@@ -11,37 +11,68 @@ permissions:
 jobs:
   build:
     name: Build and Release
-    runs-on: windows-latest
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        include:
+          - os: windows-latest
+            target: x86_64-pc-windows-msvc
+            name: windows
+            ext: .exe
+          - os: ubuntu-latest
+            target: x86_64-unknown-linux-gnu
+            name: linux
+            ext: ""
+
     steps:
       - name: Checkout code
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
 
       - name: Setup Rust
-        uses: actions-rs/toolchain@v1
-        with:
-          toolchain: stable
-          override: true
+        uses: dtolnay/rust-toolchain@stable
 
       - name: Build release binary
-        uses: actions-rs/cargo@v1
-        with:
-          command: build
-          args: --release
+        run: cargo build --release --target ${{ matrix.target }}
 
-      - name: Create portable package
+      - name: Create portable package (Windows)
+        if: matrix.os == 'windows-latest'
         shell: pwsh
         run: |
           New-Item -ItemType Directory -Path rust_browser_handler_portable/docs -Force
-          Copy-Item target/release/rust_browser_handler.exe rust_browser_handler_portable/
+          Copy-Item target/${{ matrix.target }}/release/rust_browser_handler${{ matrix.ext }} rust_browser_handler_portable/
           Copy-Item README.md rust_browser_handler_portable/docs/
-                   
+
           # Create ZIP archive
-          Compress-Archive -Path rust_browser_handler_portable/* -DestinationPath rust_browser_handler_portable.zip
+          Compress-Archive -Path rust_browser_handler_portable/* -DestinationPath rust_browser_handler_${{ matrix.name }}.zip
+
+      - name: Create portable package (Linux)
+        if: matrix.os == 'ubuntu-latest'
+        run: |
+          mkdir -p rust_browser_handler_portable/docs
+          cp target/${{ matrix.target }}/release/rust_browser_handler${{ matrix.ext }} rust_browser_handler_portable/
+          cp README.md rust_browser_handler_portable/docs/
+
+          # Create TAR.GZ archive
+          tar -czf rust_browser_handler_${{ matrix.name }}.tar.gz -C rust_browser_handler_portable .
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: rust_browser_handler_${{ matrix.name }}
+          path: rust_browser_handler_${{ matrix.name }}.*
+
+  release:
+    name: Create Release
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
 
       - name: Get version from tag
         id: get_version
-        shell: bash
-
         run: echo "VERSION=${GITHUB_REF#refs/tags/v}" >> "$GITHUB_OUTPUT"
 
       - name: Create Release
@@ -52,14 +83,31 @@ jobs:
           draft: false
           prerelease: false
           files: |
-            rust_browser_handler_portable.zip
+            artifacts/rust_browser_handler_windows/rust_browser_handler_windows.zip
+            artifacts/rust_browser_handler_linux/rust_browser_handler_linux.tar.gz
           body: |
             # Rust Browser Handler v${{ steps.get_version.outputs.VERSION }}
-            
+
             ## Installation
-            
-            ### Portable Version
-            1. Download the ZIP file
-            2. Extract to a permanent location
-            3. Execute `rust_browser_handler.exe` to register as browser, add rules, and check all commands.
-            4. Use the `open-settings` command to set this .exe or registered as the default handler.
+
+            ### Windows (Portable)
+            1. Download `rust_browser_handler_windows.zip`
+            2. **Extract to a permanent location** (recommended: `C:\Program Files\RustBrowserHandler\`)
+            3. Execute `rust_browser_handler.exe register` to register as the default browser handler
+            4. Use the `open-settings` command to verify registration or access Windows Default Apps settings
+
+            ### Linux (Portable)
+            1. Download `rust_browser_handler_linux.tar.gz`
+            2. **Extract to a permanent location** (recommended: `~/bin/` or `/usr/local/bin/`)
+            3. Execute `./rust_browser_handler register` to register as the default browser handler
+            4. The application will integrate with your desktop environment using XDG standards
+
+            ## Features
+            - Cross-platform browser handler (Windows registry + Linux XDG integration)
+            - Rule-based URL routing
+            - Interactive browser selection
+            - Command-line interface
+
+            ## Supported Platforms
+            - **Windows**: Full registry-based default handler integration
+            - **Linux**: XDG desktop integration (works with GNOME, KDE, XFCE, and other desktop environments)
