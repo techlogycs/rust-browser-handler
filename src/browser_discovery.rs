@@ -29,7 +29,6 @@ pub fn get_browser_map() -> &'static HashMap<&'static str, &'static str> {
     })
 }
 /// Helper function to extract executable path from a command string
-#[cfg(windows)]
 pub fn extract_executable_path_from_command(command: String) -> Option<String> {
     let trimmed_command = command.trim();
     if let Some(stripped) = trimmed_command.strip_prefix('"') {
@@ -48,7 +47,6 @@ pub fn extract_executable_path_from_command(command: String) -> Option<String> {
 }
 
 /// Helper function to check if a path likely points to a browser executable
-#[cfg(windows)]
 pub fn is_browser_executable(path: &str) -> bool {
     let lower_path = path.to_ascii_lowercase();
     // Only check the file name part
@@ -90,17 +88,17 @@ fn generate_common_browser_paths() -> Vec<PathBuf> {
 
     // Common browser paths
     let browser_paths = [
-        "Google\\Chrome\\Application\\chrome.exe",
-        "Mozilla Firefox\\firefox.exe",
-        "Microsoft\\Edge\\Application\\msedge.exe",
-        "BraveSoftware\\Brave-Browser\\Application\\brave.exe",
-        "Opera\\launcher.exe",
-        "Opera\\opera.exe",
-        "Vivaldi\\Application\\vivaldi.exe",
-        "LibreWolf\\librewolf.exe",
-        "Waterfox\\waterfox.exe",
-        "Thorium\\Application\\thorium.exe",
-        "Ablaze Floorp\\floorp.exe",
+        "Google/Chrome/Application/chrome.exe",
+        "Mozilla Firefox/firefox.exe",
+        "Microsoft/Edge/Application/msedge.exe",
+        "BraveSoftware/Brave-Browser/Application/brave.exe",
+        "Opera/launcher.exe",
+        "Opera/opera.exe",
+        "Vivaldi/Application/vivaldi.exe",
+        "LibreWolf/librewolf.exe",
+        "Waterfox/waterfox.exe",
+        "Thorium/Application/thorium.exe",
+        "Ablaze Floorp/floorp.exe",
     ];
 
     for prefix in prefixes {
@@ -116,23 +114,23 @@ fn generate_common_browser_paths() -> Vec<PathBuf> {
     // Scoop installations
     if let Ok(user_profile) = env::var("USERPROFILE") {
         paths.push(PathBuf::from(format!(
-            "{}\\scoop\\apps\\googlechrome\\current\\chrome.exe",
+            "{}/scoop/apps/googlechrome/current/chrome.exe",
             user_profile
         )));
         paths.push(PathBuf::from(format!(
-            "{}\\scoop\\apps\\firefox\\current\\firefox.exe",
+            "{}/scoop/apps/firefox/current/firefox.exe",
             user_profile
         )));
         paths.push(PathBuf::from(format!(
-            "{}\\scoop\\apps\\brave\\current\\brave.exe",
+            "{}/scoop/apps/brave/current/brave.exe",
             user_profile
         )));
         paths.push(PathBuf::from(format!(
-            "{}\\scoop\\apps\\opera\\current\\opera.exe",
+            "{}/scoop/apps/opera/current/opera.exe",
             user_profile
         )));
         paths.push(PathBuf::from(format!(
-            "{}\\scoop\\apps\\vivaldi\\current\\vivaldi.exe",
+            "{}/scoop/apps/vivaldi/current/vivaldi.exe",
             user_profile
         )));
     }
@@ -259,35 +257,33 @@ mod tests {
     #[test]
     fn test_is_browser_executable() {
         assert!(is_browser_executable(
-            "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe"
+            "C:/Program Files/Google/Chrome/Application/chrome.exe"
         ));
         assert!(is_browser_executable(
-            "C:\\Program Files\\Mozilla Firefox\\firefox.exe"
+            "C:/Program Files/Mozilla Firefox/firefox.exe"
         ));
         assert!(!is_browser_executable(
-            "C:\\Program Files\\Browser\\browser.dll"
+            "C:/Program Files/Browser/browser.dll"
         ));
         assert!(!is_browser_executable(""));
         assert!(!is_browser_executable(
-            "C:\\Program Files\\Browser\\browser.exe.txt"
+            "C:/Program Files/Browser/browser.exe.txt"
         ));
     }
 
     #[test]
     fn test_get_browser_name_from_path() {
         assert_eq!(
-            get_browser_name_from_path(
-                "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe"
-            ),
+            get_browser_name_from_path("C:/Program Files/Google/Chrome/Application/chrome.exe"),
             "Google Chrome".to_string()
         );
         assert_eq!(
-            get_browser_name_from_path("C:\\Program Files\\Mozilla Firefox\\firefox.exe"),
+            get_browser_name_from_path("C:/Program Files/Mozilla Firefox/firefox.exe"),
             "Mozilla Firefox".to_string()
         );
         assert_eq!(get_browser_name_from_path(""), "".to_string());
         assert_eq!(
-            get_browser_name_from_path("C:\\not_a_browser.txt"),
+            get_browser_name_from_path("C:/not_a_browser.txt"),
             "not_a_browser.txt".to_string()
         );
     }

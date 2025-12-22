@@ -24,13 +24,14 @@ Each rule is a JSON object with the following fields:
 [
   {
     "pattern": "work.com",
-    "browser": "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe"
+    "browser": "C:/Program Files/Google/Chrome/Application/chrome.exe"
   },
   {
     "pattern": ".*\\.internal\\.net",
-    "browser": "C:\\Program Files\\Mozilla Firefox\\firefox.exe",
+    "browser": "C:/Program Files/Mozilla Firefox/firefox.exe",
     "is_regex": true
   }
+]
 ]
 ```
 
@@ -77,10 +78,10 @@ You can manage rules using the command-line interface in two ways:
 
     ```bash
     # Add a rule (substring match)
-    target\x86_64-pc-windows-gnu\release\rust_browser_handler.exe add "work.com" "C:\Program Files\Google\Chrome\Application\chrome.exe"
+    target\x86_64-pc-windows-gnu\release\rust_browser_handler.exe add "work.com" "C:/Program Files/Google/Chrome/Application/chrome.exe"
 
     # Add a rule (regex match)
-    target\x86_64-pc-windows-gnu\release\rust_browser_handler.exe add ".*\.internal\.net" "C:\Program Files\Mozilla Firefox\firefox.exe" --regex
+    target\x86_64-pc-windows-gnu\release\rust_browser_handler.exe add ".*\.internal\.net" "C:/Program Files/Mozilla Firefox/firefox.exe" --regex
 
     # List all rules
     target\x86_64-pc-windows-gnu\release\rust_browser_handler.exe list
@@ -89,10 +90,10 @@ You can manage rules using the command-line interface in two ways:
     target\x86_64-pc-windows-gnu\release\rust_browser_handler.exe remove "work.com"
 
     # Import rules from a file
-    target\x86_64-pc-windows-gnu\release\rust_browser_handler.exe import "path\to\your\rules.json"
+    target\x86_64-pc-windows-gnu\release\rust_browser_handler.exe import "path/to/your/rules.json"
 
     # Export rules to a file
-    target\x86_64-pc-windows-gnu\release\rust_browser_handler.exe export "path\to\save\rules.json"
+    target\x86_64-pc-windows-gnu\release\rust_browser_handler.exe export "path/to/save/rules.json"
 
     # Open Windows Settings to manage default handlers
     target\x86_64-pc-windows-gnu\release\rust_browser_handler.exe open-settings

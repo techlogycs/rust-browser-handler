@@ -38,12 +38,13 @@ pub fn set_as_default_handler() -> io::Result<()> {
     let registered_apps_key =
         hkcu.open_subkey_with_flags("Software\\RegisteredApplications", KEY_ALL_ACCESS)?;
     registered_apps_key.set_value(
-        "RustBrowserHandler",
-        &"Software\\Clients\\StartMenuInternet\\RustBrowserHandler\\Capabilities",
+        "rust_browser_handler.exe",
+        &"Software\\Clients\\StartMenuInternet\\rust_browser_handler.exe\\Capabilities",
     )?;
 
-    let capabilities_key = hkcu
-        .create_subkey("Software\\Clients\\StartMenuInternet\\RustBrowserHandler\\Capabilities")?;
+    let capabilities_key = hkcu.create_subkey(
+        "Software\\Clients\\StartMenuInternet\\rust_browser_handler.exe\\Capabilities",
+    )?;
     capabilities_key.0.set_value(
         "ApplicationDescription",
         &"Handles URLs based on defined rules.",
@@ -63,11 +64,21 @@ pub fn set_as_default_handler() -> io::Result<()> {
         .0
         .set_value("https", &"rust-browser-handler")?;
 
+    // Set as default for Start Menu Internet
+    let start_menu_internet_key = hkcu.create_subkey("Software\\Clients\\StartMenuInternet")?;
+    start_menu_internet_key
+        .0
+        .set_value("", &"rust_browser_handler.exe")?;
+
+    // Set ProgIDs for http and https to make it the default handler
+    let http_key = hkcu.create_subkey("Software\\Classes\\http")?;
+    http_key.0.set_value("", &"rust-browser-handler")?;
+    let https_key = hkcu.create_subkey("Software\\Classes\\https")?;
+    https_key.0.set_value("", &"rust-browser-handler")?;
+
     info!("Registry entries created/updated.");
     println!("Registry entries created/updated.");
-    println!(
-        "Please go to Windows Default Apps settings and set 'Rust Browser Handler' as the default for HTTP and HTTPS protocols."
-    );
+    println!("The application is now registered as the default browser handler.");
 
     Ok(())
 }
@@ -80,7 +91,7 @@ pub fn unregister_handler() -> io::Result<()> {
 
     // Remove URLAssociations
     if let Ok(capabilities_key) = hkcu.open_subkey_with_flags(
-        "Software\\Clients\\StartMenuInternet\\RustBrowserHandler\\Capabilities",
+        "Software\\Clients\\StartMenuInternet\\rust_browser_handler.exe\\Capabilities",
         KEY_ALL_ACCESS,
     ) {
         let _ = capabilities_key.delete_subkey_all("URLAssociations");
@@ -89,13 +100,14 @@ pub fn unregister_handler() -> io::Result<()> {
         warn!("Could not open Capabilities key to remove URLAssociations.");
     }
 
-    // Remove Capabilities key itself (which is RustBrowserHandler under StartMenuInternet)
+    // Remove Capabilities key itself (which is rust_browser_handler.exe under StartMenuInternet)
     if let Ok(start_menu_internet_key) =
         hkcu.open_subkey_with_flags("Software\\Clients\\StartMenuInternet", KEY_ALL_ACCESS)
     {
-        let _ = start_menu_internet_key.delete_subkey_all("RustBrowserHandler");
+        let _ = start_menu_internet_key.delete_subkey_all("rust_browser_handler.exe");
+        let _ = start_menu_internet_key.set_value("", &""); // Clear the default
         info!(
-            "Software\\Clients\\StartMenuInternet\\RustBrowserHandler key removed or did not exist."
+            "Software\\Clients\\StartMenuInternet\\rust_browser_handler.exe key removed or did not exist."
         );
     } else {
         warn!("Could not open Software\\Clients\\StartMenuInternet key.");
@@ -105,10 +117,26 @@ pub fn unregister_handler() -> io::Result<()> {
     if let Ok(registered_apps_key) =
         hkcu.open_subkey_with_flags("Software\\RegisteredApplications", KEY_ALL_ACCESS)
     {
-        let _ = registered_apps_key.delete_value("RustBrowserHandler");
-        info!("RustBrowserHandler value removed from RegisteredApplications or did not exist.");
+        let _ = registered_apps_key.delete_value("rust_browser_handler.exe");
+        info!(
+            "rust_browser_handler.exe value removed from RegisteredApplications or did not exist."
+        );
     } else {
         warn!("Could not open RegisteredApplications key.");
+    }
+
+    // Clear ProgID settings for http and https
+    if let Ok(http_key) = hkcu.open_subkey_with_flags("Software\\Classes\\http", KEY_ALL_ACCESS) {
+        let _ = http_key.set_value("", &"");
+        info!("Cleared default ProgID for http.");
+    } else {
+        warn!("Could not open Software\\Classes\\http key.");
+    }
+    if let Ok(https_key) = hkcu.open_subkey_with_flags("Software\\Classes\\https", KEY_ALL_ACCESS) {
+        let _ = https_key.set_value("", &"");
+        info!("Cleared default ProgID for https.");
+    } else {
+        warn!("Could not open Software\\Classes\\https key.");
     }
 
     // Remove custom URL scheme (rust-browser-handler)
