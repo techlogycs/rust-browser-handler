@@ -185,7 +185,7 @@ fn handle_command(command: Option<Commands>, url: Option<String>) {
         }
         Some(Commands::OpenSettings) => {
             info!("Opening Windows Default Apps settings...");
-            println!("Please add this app as a default browser handler for HTTP and HTTP.");
+            println!("Please add this app as a default browser handler for HTTP and HTTPS.");
             std::thread::sleep(std::time::Duration::from_secs(2));
             match Command::new("cmd")
                 .args(["/C", "start ms-settings:defaultapps"])
