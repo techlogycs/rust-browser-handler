@@ -61,22 +61,7 @@ jobs:
           if [[ "${http_code}" == "200" ]]; then
             # Python exit code drives shell branching:
             # 0 => assets complete (skip build), 1 => assets missing (build needed).
-            if RELEASE_JSON_PATH="${release_json_path}" python - <<'PY'
-import json
-import os
-import sys
-
-with open(os.environ["RELEASE_JSON_PATH"], "r", encoding="utf-8") as file:
-    data = json.load(file)
-
-assets = {asset.get("name") for asset in data.get("assets", [])}
-required = {"rust_browser_handler_windows.zip", "rust_browser_handler_linux.tar.gz"}
-if required.issubset(assets):
-    raise SystemExit(0)
-
-print("Required release assets missing, build needed.", file=sys.stderr)
-raise SystemExit(1)
-PY
+            if RELEASE_JSON_PATH="${release_json_path}" python -c "import json, os, sys; data=json.load(open(os.environ['RELEASE_JSON_PATH'], 'r', encoding='utf-8')); assets={a.get('name') for a in data.get('assets', [])}; required={'rust_browser_handler_windows.zip','rust_browser_handler_linux.tar.gz'}; sys.exit(0 if required.issubset(assets) else 1)"
             then
               should_build="false"
             fi
