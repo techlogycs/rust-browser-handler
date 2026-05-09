@@ -30,7 +30,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          release_json_path='/tmp/release.json'
+          release_json_path="${RUNNER_TEMP}/release.json"
 
           if [[ "${GITHUB_EVENT_NAME}" == "workflow_dispatch" ]]; then
             version='${{ github.event.inputs.version }}'
