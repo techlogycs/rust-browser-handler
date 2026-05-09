@@ -15,7 +15,7 @@ This project is a Rust-based command-line application that acts as a cross-platf
 ## Installation
 
 ### Download
-Download the appropriate release for your platform from the [GitHub Releases](https://github.com/axellpadilla/rust-browser-handler/releases) page.
+Download the appropriate release for your platform from the [GitHub Releases](https://github.com/techlogycs/rust-browser-handler/releases) page.
 
 ### Windows
 1. Download `rust_browser_handler_windows.zip`
@@ -53,34 +53,6 @@ Each rule is a JSON object with the following fields:
     "browser": "/usr/bin/firefox",
     "is_regex": true
   }
-]
-```
-
-If `is_regex` is not specified, the rule defaults to substring matching.
-
-## Rules File Format
-
-Rules are stored in a JSON file named `rules.json` in your user's configuration directory (e.g., `%APPDATA%\Roaming\RustBrowserHandler\rules.json` on Windows).
-
-Each rule is a JSON object with the following fields:
-
-- `pattern` (string): The substring or regular expression to match against URLs.
-- `browser` (string): The path or identifier of the browser to use.
-- `is_regex` (boolean, optional): If `true`, the `pattern` is treated as a regular expression. If omitted or `false`, the pattern is matched as a substring.
-
-**Example `rules.json`:**
-```json
-[
-  {
-    "pattern": "work.com",
-    "browser": "C:/Program Files/Google/Chrome/Application/chrome.exe"
-  },
-  {
-    "pattern": ".*\\.internal\\.net",
-    "browser": "C:/Program Files/Mozilla Firefox/firefox.exe",
-    "is_regex": true
-  }
-]
 ]
 ```
 

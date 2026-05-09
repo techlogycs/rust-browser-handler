@@ -139,7 +139,7 @@ jobs:
   release:
     name: Create Release
     needs: [prepare, build]
-    if: !cancelled() && needs.prepare.result == 'success' && (needs.build.result == 'success' || needs.build.result == 'skipped')
+    if: ${{ !cancelled() && needs.prepare.result == 'success' && (needs.build.result == 'success' || needs.build.result == 'skipped') }}
     runs-on: ubuntu-latest
     env:
       RELEASE_BODY: |
