@@ -1,10 +1,132 @@
 use super::PlatformHandler;
+use log::warn;
 use std::collections::HashSet;
 use std::fs;
+use std::io;
+use std::io::ErrorKind;
 use std::path::Path;
-use std::process::Command;
+use std::process::{Command, Output};
 
 pub struct LinuxHandler;
+
+fn render_desktop_entry(exe_path: &str) -> String {
+    include_str!("../../packaging/desktop/rust-browser-handler.desktop.in")
+        .replace("@EXECUTABLE@", exe_path)
+}
+
+fn extract_stderr(output: &Output) -> Option<String> {
+    let stderr = String::from_utf8_lossy(&output.stderr).trim().to_owned();
+    if stderr.is_empty() {
+        None
+    } else {
+        Some(stderr)
+    }
+}
+
+fn format_xdg_mime_io_error(prefix: &str, err: &io::Error) -> String {
+    match err.kind() {
+        ErrorKind::NotFound => {
+            format!("{prefix}: command not found (is `xdg-mime` installed and on PATH?)")
+        }
+        ErrorKind::PermissionDenied => {
+            format!("{prefix}: permission denied when executing `xdg-mime`")
+        }
+        other => format!("{prefix}: I/O error ({other:?}): {err}"),
+    }
+}
+
+fn purge_desktop_entry_from_mimeapps(contents: &str, desktop_id: &str) -> String {
+    let mut output = Vec::new();
+    let mut current_section: Option<String> = None;
+
+    for line in contents.lines() {
+        let trimmed = line.trim();
+        if trimmed.starts_with('[') && trimmed.ends_with(']') && trimmed.len() > 2 {
+            current_section = Some(trimmed[1..trimmed.len() - 1].to_string());
+            output.push(line.to_string());
+            continue;
+        }
+
+        if let Some((key, value)) = line.split_once('=') {
+            let mut entries: Vec<&str> = value
+                .split(';')
+                .filter(|entry| !entry.is_empty() && *entry != desktop_id)
+                .collect();
+
+            let in_default_applications = matches!(
+                current_section.as_deref(),
+                Some("Default Applications") | Some("DefaultApplications")
+            );
+
+            if entries.is_empty() {
+                if in_default_applications {
+                    continue;
+                }
+                output.push(format!("{}=", key));
+                continue;
+            }
+
+            entries.push("");
+            output.push(format!("{}={}", key, entries.join(";")));
+        } else {
+            output.push(line.to_string());
+        }
+    }
+
+    let mut normalized = output.join("\n");
+    if contents.ends_with('\n') {
+        normalized.push('\n');
+    }
+    normalized
+}
+
+fn cleanup_mimeapps_defaults(desktop_id: &str) -> io::Result<bool> {
+    let mut changed_any = false;
+    let mut paths = Vec::new();
+
+    if let Some(config_dir) = dirs::config_dir() {
+        paths.push(config_dir.join("mimeapps.list"));
+    }
+    if let Some(data_dir) = dirs::data_dir() {
+        paths.push(data_dir.join("applications/mimeapps.list"));
+    }
+
+    for path in paths {
+        if !path.exists() {
+            continue;
+        }
+
+        let contents = fs::read_to_string(&path)?;
+        let updated = purge_desktop_entry_from_mimeapps(&contents, desktop_id);
+
+        if updated != contents {
+            fs::write(path, updated)?;
+            changed_any = true;
+        }
+    }
+
+    Ok(changed_any)
+}
+
+fn detect_system_mimeapps_references(desktop_id: &str) -> Vec<String> {
+    let candidates = [
+        "/etc/xdg/mimeapps.list",
+        "/usr/local/share/applications/mimeapps.list",
+        "/usr/share/applications/mimeapps.list",
+    ];
+
+    candidates
+        .iter()
+        .filter_map(|path| {
+            let content = fs::read_to_string(path).ok()?;
+            if content.contains(desktop_id) {
+                Some((*path).to_string())
+            } else {
+                None
+            }
+        })
+        .collect()
+}
 
 impl PlatformHandler for LinuxHandler {
     fn find_browsers(&self) -> Vec<String> {
@@ -75,19 +197,7 @@ impl PlatformHandler for LinuxHandler {
             .to_string();
 
         // Create .desktop file content
-        let desktop_content = format!(
-            r#"[Desktop Entry]
-Version=1.0
-Type=Application
-Name=Rust Browser Handler
-Exec="{}" %u
-Terminal=false
-Categories=Network;WebBrowser;
-MimeType=x-scheme-handler/http;x-scheme-handler/https;
-StartupNotify=false
-"#,
-            exe_path
-        );
+        let desktop_content = render_desktop_entry(&exe_path);
 
         // Create applications directory if it doesn't exist
         let desktop_dir = dirs::data_dir()
@@ -99,35 +209,192 @@ StartupNotify=false
         let desktop_file = desktop_dir.join("rust-browser-handler.desktop");
         fs::write(&desktop_file, desktop_content)?;
 
+        // Update desktop database so DE settings can discover this entry.
+        let update_db_status = Command::new("update-desktop-database")
+            .arg(&desktop_dir)
+            .status();
+
+        match update_db_status {
+            Ok(status) if !status.success() => {
+                warn!(
+                    "warning: update-desktop-database exited with status: {}",
+                    status
+                );
+            }
+            Err(e) => {
+                warn!(
+                    "warning: update-desktop-database is not available or could not be executed ({}); desktop database was not refreshed.",
+                    e
+                );
+            }
+            _ => {}
+        }
+
         // Set MIME type associations using xdg-mime
         let http_status = Command::new("xdg-mime")
-            .args(&[
+            .args([
                 "default",
                 "rust-browser-handler.desktop",
                 "x-scheme-handler/http",
             ])
-            .status();
+            .output();
 
         let https_status = Command::new("xdg-mime")
-            .args(&[
+            .args([
                 "default",
                 "rust-browser-handler.desktop",
                 "x-scheme-handler/https",
             ])
-            .status();
+            .output();
 
         match (http_status, https_status) {
-            (Ok(http), Ok(https)) if http.success() && https.success() => {
-                println!("Successfully registered as default browser using XDG standards.");
-                println!(
-                    "The application is now set as the default handler for HTTP and HTTPS URLs."
-                );
-                Ok(())
+            (Ok(http), Ok(https)) if http.status.success() && https.status.success() => {
+                // Best-effort for environments that consult gio MIME defaults.
+                let _ = Command::new("gio")
+                    .args([
+                        "mime",
+                        "x-scheme-handler/http",
+                        "rust-browser-handler.desktop",
+                    ])
+                    .status();
+                let _ = Command::new("gio")
+                    .args([
+                        "mime",
+                        "x-scheme-handler/https",
+                        "rust-browser-handler.desktop",
+                    ])
+                    .status();
+
+                // Best-effort for environments that prefer xdg-settings.
+                let xdg_settings_set = Command::new("xdg-settings")
+                    .args(["set", "default-web-browser", "rust-browser-handler.desktop"])
+                    .output();
+
+                let xdg_settings_get = Command::new("xdg-settings")
+                    .args(["get", "default-web-browser"])
+                    .output();
+
+                let xdg_settings_matches = xdg_settings_get
+                    .as_ref()
+                    .ok()
+                    .and_then(|output| String::from_utf8(output.stdout.clone()).ok())
+                    .map(|value| value.trim().to_string())
+                    .as_deref()
+                    == Some("rust-browser-handler.desktop");
+
+                if xdg_settings_matches {
+                    match xdg_settings_set {
+                        Ok(output) if !output.status.success() => {
+                            eprintln!(
+                                "warning: xdg-settings set default-web-browser exited with {} but xdg-settings get already reports rust-browser-handler.desktop. Some desktop environments, mail fail set operations even when the setting is correct. The MIME associations were still applied.",
+                                output.status
+                            );
+                        }
+                        Err(e) => {
+                            eprintln!(
+                                "warning: xdg-settings set default-web-browser could not be executed ({}), but xdg-settings get already reports rust-browser-handler.desktop. Some desktop environments, including Pop!_OS COSMIC, do not use set as a reliable signal. The MIME associations were still applied.",
+                                e
+                            );
+                        }
+                        _ => {}
+                    }
+
+                    println!("Successfully registered as default browser using XDG standards.");
+                    println!(
+                        "The application is now set as the default handler for HTTP and HTTPS URLs."
+                    );
+                    Ok(())
+                } else {
+                    match xdg_settings_set {
+                        Ok(output) if output.status.success() => {
+                            println!(
+                                "Successfully registered as default browser using XDG standards."
+                            );
+                            println!(
+                                "The application is now set as the default handler for HTTP and HTTPS URLs."
+                            );
+                            Ok(())
+                        }
+                        Ok(output) => {
+                            let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
+                            eprintln!(
+                                "warning: xdg-settings set default-web-browser failed (status: {}{}). The MIME associations were still applied.",
+                                output.status,
+                                if stderr.is_empty() {
+                                    String::new()
+                                } else {
+                                    format!(", stderr: {}", stderr)
+                                }
+                            );
+                            println!(
+                                "Successfully registered default HTTP and HTTPS associations using XDG MIME data."
+                            );
+                            println!(
+                                "Note: xdg-settings did not report the desktop entry back, so the MIME association is the authoritative setting here."
+                            );
+                            Ok(())
+                        }
+                        Err(e) => {
+                            eprintln!(
+                                "warning: xdg-settings is unavailable or could not be executed ({}). The MIME associations were still applied.",
+                                e
+                            );
+                            println!(
+                                "Successfully registered default HTTP and HTTPS associations using XDG MIME data."
+                            );
+                            println!(
+                                "Note: xdg-settings was skipped, so the MIME association is the authoritative setting here."
+                            );
+                            Ok(())
+                        }
+                    }
+                }
             }
-            _ => {
-                // Clean up the desktop file if MIME association failed
+            (Err(http_err), Err(https_err)) => {
                 let _ = fs::remove_file(&desktop_file);
-                Err("Failed to set MIME type associations. Ensure xdg-mime is available.".into())
+                Err(io::Error::other(format!(
+                    "{}; {}",
+                    format_xdg_mime_io_error(
+                        "Failed to run xdg-mime for HTTP association",
+                        &http_err
+                    ),
+                    format_xdg_mime_io_error(
+                        "Failed to run xdg-mime for HTTPS association",
+                        &https_err
+                    )
+                ))
+                .into())
+            }
+            (Err(http_err), _) => {
+                let _ = fs::remove_file(&desktop_file);
+                Err(io::Error::other(format_xdg_mime_io_error(
+                    "Failed to run xdg-mime for HTTP association",
+                    &http_err,
+                ))
+                .into())
+            }
+            (_, Err(https_err)) => {
+                let _ = fs::remove_file(&desktop_file);
+                Err(io::Error::other(format_xdg_mime_io_error(
+                    "Failed to run xdg-mime for HTTPS association",
+                    &https_err,
+                ))
+                .into())
+            }
+            (Ok(http), Ok(https)) => {
+                let http_stderr = extract_stderr(&http)
+                    .map(|value| format!(", http stderr: {}", value))
+                    .unwrap_or_default();
+                let https_stderr = extract_stderr(&https)
+                    .map(|value| format!(", https stderr: {}", value))
+                    .unwrap_or_default();
+
+                let _ = fs::remove_file(&desktop_file);
+                Err(io::Error::other(format!(
+                    "Failed to set MIME associations (http status: {}, https status: {}){}{}. Ensure xdg-mime is available.",
+                    http.status, https.status, http_stderr, https_stderr
+                ))
+                .into())
             }
         }
     }
@@ -145,6 +412,26 @@ StartupNotify=false
             println!("Desktop file not found - application may not be registered.");
         }
 
+        // Remove stale default entries from user mimeapps lists.
+        match cleanup_mimeapps_defaults("rust-browser-handler.desktop") {
+            Ok(true) => {
+                println!("Removed rust-browser-handler.desktop references from mimeapps.list.")
+            }
+            Ok(false) => {}
+            Err(e) => eprintln!(
+                "warning: Failed to clean MIME defaults from mimeapps.list: {}",
+                e
+            ),
+        }
+
+        let system_references = detect_system_mimeapps_references("rust-browser-handler.desktop");
+        if !system_references.is_empty() {
+            eprintln!(
+                "warning: Found system-level MIME defaults still referencing rust-browser-handler.desktop in: {}. You may need manual cleanup with administrator privileges.",
+                system_references.join(", ")
+            );
+        }
+
         // Note: We can't easily reset to the previous default browser
         // The system will fall back to whatever was previously configured
         // or the distribution's default browser
@@ -154,22 +441,84 @@ StartupNotify=false
     }
 
     fn is_default_handler(&self) -> bool {
-        // Check if our desktop file is associated with HTTP scheme
-        if let Ok(output) = Command::new("xdg-mime")
-            .args(&["query", "default", "x-scheme-handler/http"])
-            .output()
-        {
-            if let Ok(mime_default) = String::from_utf8(output.stdout) {
-                return mime_default.trim() == "rust-browser-handler.desktop";
+        let query_default = |mime_type: &str| -> Result<String, ()> {
+            let output = Command::new("xdg-mime")
+                .args(["query", "default", mime_type])
+                .output()
+                .map_err(|_| ())?;
+
+            if !output.status.success() {
+                return Err(());
             }
+
+            String::from_utf8(output.stdout)
+                .map(|value| value.trim().to_string())
+                .map_err(|_| ())
+        };
+
+        // Check both HTTP and HTTPS associations first.
+        let http_default = query_default("x-scheme-handler/http");
+        let https_default = query_default("x-scheme-handler/https");
+
+        if matches!(
+            http_default.as_deref(),
+            Ok(default) if default != "rust-browser-handler.desktop"
+        ) {
+            return false;
+        }
+        if matches!(
+            https_default.as_deref(),
+            Ok(default) if default != "rust-browser-handler.desktop"
+        ) {
+            return false;
         }
 
-        // Fallback: check if desktop file exists
+        if matches!(http_default.as_deref(), Ok("rust-browser-handler.desktop"))
+            && matches!(https_default.as_deref(), Ok("rust-browser-handler.desktop"))
+        {
+            return true;
+        }
+
+        // Fallback only when xdg-mime failed for at least one lookup.
         if let Some(data_dir) = dirs::data_dir() {
             let desktop_file = data_dir.join("applications/rust-browser-handler.desktop");
             return desktop_file.exists();
         }
 
         false
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{purge_desktop_entry_from_mimeapps, render_desktop_entry};
+
+    #[test]
+    fn desktop_entry_uses_unquoted_exec_path() {
+        let desktop_entry = render_desktop_entry("/tmp/rust browser handler");
+
+        assert!(desktop_entry.contains("Exec=/tmp/rust browser handler %u"));
+        assert!(!desktop_entry.contains("Exec=\"/tmp/rust browser handler\" %u"));
+        assert!(!desktop_entry.contains("@EXECUTABLE@"));
+    }
+
+    #[test]
+    fn purge_mimeapps_removes_desktop_id_entries() {
+        let input = "[Default Applications]\nx-scheme-handler/http=rust-browser-handler.desktop;firefox.desktop;\nx-scheme-handler/https=rust-browser-handler.desktop;\ntext/html=firefox.desktop;\n";
+        let output = purge_desktop_entry_from_mimeapps(input, "rust-browser-handler.desktop");
+
+        assert!(output.contains("x-scheme-handler/http=firefox.desktop;"));
+        assert!(!output.contains("x-scheme-handler/https="));
+        assert!(output.contains("text/html=firefox.desktop;"));
+        assert!(!output.contains("rust-browser-handler.desktop"));
+    }
+
+    #[test]
+    fn purge_mimeapps_keeps_non_default_sections_with_empty_assignment() {
+        let input = "[Added Associations]\nx-scheme-handler/http=rust-browser-handler.desktop;\n";
+        let output = purge_desktop_entry_from_mimeapps(input, "rust-browser-handler.desktop");
+
+        assert!(output.contains("[Added Associations]"));
+        assert!(output.contains("x-scheme-handler/http="));
     }
 }

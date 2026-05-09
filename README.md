@@ -130,6 +130,19 @@ To register the application as the default handler for http and https protocols,
 target\x86_64-pc-windows-gnu\release\rust_browser_handler.exe register
 ```
 
+To install to a best-practice Windows user path first:
+
+```powershell
+# Run from your current extracted/build location
+rust_browser_handler.exe install
+
+# Then register from the installed location
+& "$env:LOCALAPPDATA\\Programs\\RustBrowserHandler\\rust_browser_handler.exe" register
+
+# Remove the installed copy and unregister the handler
+rust_browser_handler.exe uninstall
+```
+
 **Important:** Place the executable in a permanent location before registering, as the registry entries will point to that specific path.
 
 This performs full registry integration to become the system default browser handler.
@@ -143,11 +156,42 @@ On Linux systems, registration uses XDG standards for cross-desktop compatibilit
 ./rust_browser_handler register
 ```
 
+To install to a best-practice Linux user path first:
+
+```bash
+# Run from your current extracted/build location
+./rust_browser_handler install
+
+# Then this command is available from ~/.local/bin if it is in your PATH
+rust_browser_handler register
+
+# Remove the installed copy only
+rust_browser_handler uninstall
+```
+
 **Important:** Place the executable in a permanent location before registering, as the `.desktop` file will reference that specific path.
 
-This creates a `.desktop` file in `~/.local/share/applications/` and uses `xdg-mime` to associate the application with HTTP and HTTPS URL schemes. This works across all desktop environments (GNOME, KDE, XFCE, etc.) that follow freedesktop.org standards.
+This creates a `.desktop` file in `~/.local/share/applications/` and uses `xdg-mime` to associate the application with HTTP and HTTPS URL schemes. This works across desktop environments (GNOME, KDE, XFCE, COSMIC, etc.) that follow freedesktop.org standards.
+
+For Ubuntu GNOME and Pop!_OS (GNOME or COSMIC), the freedesktop/XDG association is the canonical integration layer:
+
+```bash
+xdg-mime query default x-scheme-handler/http
+xdg-mime query default x-scheme-handler/https
+xdg-settings get default-web-browser
+```
+
+Expected result for the first two commands:
+
+```text
+rust-browser-handler.desktop
+```
+
+If COSMIC or GNOME Settings UI does not immediately show the app in Default Applications, log out and log back in after registration.
 
 Alternatively, you can run the executable without arguments to enter interactive mode and use the `register` command there.
+
+If you run `register` from a non-installed binary, the app will prompt you to either install to the best-practice location first and register that copy, or register the current location as-is. Use `unregister` separately if you want to clear the browser association.
 
 ### Rule Management
 
@@ -239,7 +283,7 @@ The dev container includes:
 After cloning this repository, the dev container will automatically run the setup. If developing locally (not recommended), run:
 
 ```bash
-cargo setup-dev
+make setup-dev
 ```
 
 This will:
@@ -249,37 +293,7 @@ This will:
 
 ### Development Commands
 
-```bash
-# Run the application (Linux native)
-cargo run
-
-# Run the application (Windows cross-compilation)
-cargo run --target x86_64-pc-windows-gnu
-
-# Development mode (auto-rebuild on changes)
-cargo dev
-
-# Run tests
-cargo test
-
-# Run tests with auto-rerun on changes
-cargo test-watch
-
-# Format code
-cargo format
-
-# Lint code
-cargo lint
-
-# Run all checks (format, lint, test)
-cargo check-all
-
-# Build for Linux release
-cargo build --release
-
-# Build for Windows release
-cargo build --release --target x86_64-pc-windows-gnu
-```
+Check the `Makefile` for available commands.
 
 ### Commit Message Format
 

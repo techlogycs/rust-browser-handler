@@ -38,17 +38,40 @@ pub fn get_browser_name_from_path(path: &str) -> String {
         .unwrap_or_else(|| path.to_string())
 }
 
-/// Normalizes a path for cross-platform deduplication
+/**
+ * Normalizes a path for cross-platform deduplication.
+ *
+ * Strategy:
+ * - Prefer filesystem-based canonicalization when available.
+ * - On error, fall back to a deterministic, purely syntactic normalization:
+ *   - Convert '\' to '/' so separators are consistent across platforms.
+ *   - Remove redundant trailing separators (except for root "/").
+ */
 pub fn normalize_path(path: &str) -> String {
     match Path::new(path).canonicalize() {
         Ok(canonical) => canonical.to_string_lossy().replace('\\', "/"),
-        Err(_) => path.to_string(), // Fallback if canonicalize fails
+        Err(_) => normalize_fallback(path),
     }
+}
+
+/// Syntactic, filesystem-independent normalization used when `canonicalize` fails.
+fn normalize_fallback(path: &str) -> String {
+    // Normalize separators to forward slashes
+    let mut normalized = path.replace('\\', "/");
+
+    // Collapse trailing separators, but keep "/" as-is
+    while normalized.len() > 1 && normalized.ends_with('/') {
+        normalized.pop();
+    }
+
+    normalized
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::fs;
+    use std::time::{SystemTime, UNIX_EPOCH};
 
     #[test]
     fn test_get_browser_name_from_path() {
@@ -65,5 +88,54 @@ mod tests {
             get_browser_name_from_path("C:/not_a_browser.txt"),
             "not_a_browser.txt".to_string()
         );
+    }
+
+    #[test]
+    fn test_normalize_path() {
+        assert_eq!(
+            normalize_path("C:\\Program Files\\Google\\Chrome\\Application\\chrome"),
+            "C:/Program Files/Google/Chrome/Application/chrome".to_string()
+        );
+
+        let unique = format!(
+            "rbh-normalize-{}-{}",
+            std::process::id(),
+            SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .expect("system clock is before UNIX_EPOCH")
+                .as_nanos()
+        );
+        let temp_root = std::env::temp_dir().join(unique);
+        let nested_dir = temp_root.join("nested");
+        fs::create_dir_all(&nested_dir).expect("failed to create temp test directory");
+        let file_path = nested_dir.join("browser-bin");
+        fs::write(&file_path, b"test").expect("failed to create temp test file");
+
+        let synthetic_with_dot_segments = nested_dir.join("..").join("nested/browser-bin");
+        let expected = file_path
+            .canonicalize()
+            .expect("failed to canonicalize expected path")
+            .to_string_lossy()
+            .replace('\\', "/");
+
+        assert_eq!(
+            normalize_path(&synthetic_with_dot_segments.to_string_lossy()),
+            expected
+        );
+
+        let _ = fs::remove_dir_all(&temp_root);
+
+        assert_eq!(
+            normalize_path("C:/not_a_browser.txt/"),
+            "C:/not_a_browser.txt".to_string()
+        );
+    }
+
+    #[test]
+    fn test_fallback_normalize_path() {
+        // Simulate a path that cannot be canonicalized (e.g., non-existent path)
+        let non_existent_path = "C:/this/path/does/not/exist";
+        let normalized = normalize_path(non_existent_path);
+        assert_eq!(normalized, "C:/this/path/does/not/exist".to_string());
     }
 }
