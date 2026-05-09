@@ -219,4 +219,5 @@ PY
           name: Rust Browser Handler v${{ needs.prepare.outputs.version }}
           draft: false
           prerelease: false
+          overwrite_files: true
           body: ${{ env.RELEASE_BODY }}
