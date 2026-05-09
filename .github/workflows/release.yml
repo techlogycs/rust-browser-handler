@@ -15,8 +15,72 @@ permissions:
   contents: write
 
 jobs:
+  prepare:
+    name: Prepare Release Context
+    runs-on: ubuntu-latest
+    outputs:
+      tag: ${{ steps.release_meta.outputs.TAG }}
+      version: ${{ steps.release_meta.outputs.VERSION }}
+      should_build: ${{ steps.release_meta.outputs.SHOULD_BUILD }}
+    steps:
+      - name: Determine release metadata and build need
+        id: release_meta
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          release_json_path='/tmp/release.json'
+
+          if [[ "${GITHUB_EVENT_NAME}" == "workflow_dispatch" ]]; then
+            version='${{ github.event.inputs.version }}'
+            tag="v${version}"
+          else
+            tag="${GITHUB_REF#refs/tags/}"
+            version="${tag#v}"
+          fi
+
+          api_url="https://api.github.com/repos/${GITHUB_REPOSITORY}/releases/tags/${tag}"
+          http_code="$(curl -sS -o "${release_json_path}" -w "%{http_code}" \
+            -H "Authorization: Bearer ${GH_TOKEN}" \
+            -H "Accept: application/vnd.github+json" \
+            "$api_url")"
+
+          should_build="true"
+          if [[ "${http_code}" == "200" ]]; then
+            if RELEASE_JSON_PATH="${release_json_path}" python - <<'PY'
+import json
+import os
+import sys
+
+with open(os.environ["RELEASE_JSON_PATH"], "r", encoding="utf-8") as file:
+    data = json.load(file)
+
+assets = {asset.get("name") for asset in data.get("assets", [])}
+required = {"rust_browser_handler_windows.zip", "rust_browser_handler_linux.tar.gz"}
+if required.issubset(assets):
+    raise SystemExit(0)
+
+print("Required release assets missing, build needed.", file=sys.stderr)
+raise SystemExit(1)
+PY
+            then
+              should_build="false"
+            fi
+          elif [[ "${http_code}" != "404" ]]; then
+            echo "Failed querying release API (HTTP ${http_code})" >&2
+            cat "${release_json_path}" >&2
+            exit 1
+          fi
+
+          echo "TAG=${tag}" >> "$GITHUB_OUTPUT"
+          echo "VERSION=${version}" >> "$GITHUB_OUTPUT"
+          echo "SHOULD_BUILD=${should_build}" >> "$GITHUB_OUTPUT"
+
   build:
     name: Build and Release
+    needs: prepare
+    if: needs.prepare.outputs.should_build == 'true'
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
@@ -77,73 +141,82 @@ jobs:
 
   release:
     name: Create Release
-    needs: build
+    needs: [prepare, build]
+    if: always() && needs.prepare.result == 'success' && (needs.build.result == 'success' || needs.build.result == 'skipped')
     runs-on: ubuntu-latest
+    env:
+      RELEASE_BODY: |
+        # Rust Browser Handler v${{ needs.prepare.outputs.version }}
+
+        ## Installation
+
+        ### Windows (Portable)
+        1. Download `rust_browser_handler_windows.zip`
+        2. **Extract to a permanent location** (recommended: `C:\Program Files\RustBrowserHandler\`)
+        3. Execute `rust_browser_handler.exe register` to register as the default browser handler
+        4. Use the `open-settings` command to verify registration or access Windows Default Apps settings
+
+        ### Linux (Portable)
+        1. Download `rust_browser_handler_linux.tar.gz`
+        2. **Extract to a permanent location** (recommended: `~/bin/` or `/usr/local/bin/`)
+        3. Execute `./rust_browser_handler register` to register as the default browser handler
+        4. The application will integrate with your desktop environment using XDG standards
+
+        ## Features
+        - Cross-platform browser handler (Windows registry + Linux XDG integration)
+        - Rule-based URL routing
+        - Interactive browser selection
+        - Command-line interface
+
+        ## Supported Platforms
+        - **Windows**: Full registry-based default handler integration
+        - **Linux**: XDG desktop integration (works with GNOME, KDE, XFCE, and other desktop environments)
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
-      - name: Determine release tag
-        id: release_tag
+      - name: Ensure release tag exists (workflow dispatch)
+        if: github.event_name == 'workflow_dispatch'
         shell: bash
         run: |
-          if [[ "$GITHUB_EVENT_NAME" == "workflow_dispatch" ]]; then
-            version='${{ github.event.inputs.version }}'
-            tag="v${version}"
-
+          tag='${{ needs.prepare.outputs.tag }}'
+          if git rev-parse "${tag}" >/dev/null 2>&1; then
+            echo "Tag ${tag} already exists."
+          else
             git config user.name "github-actions[bot]"
             git config user.email "github-actions[bot]@users.noreply.github.com"
             git tag -a "$tag" -m "Release $tag"
             git push origin "$tag"
-          else
-            tag="${GITHUB_REF#refs/tags/}"
-            version="${tag#v}"
           fi
 
-          echo "TAG=$tag" >> "$GITHUB_OUTPUT"
-          echo "VERSION=$version" >> "$GITHUB_OUTPUT"
-
       - name: Download all artifacts
+        if: needs.prepare.outputs.should_build == 'true'
         uses: actions/download-artifact@v4
         with:
           path: artifacts
 
-      - name: Create Release
-        id: create_release
-        uses: softprops/action-gh-release@v1.10.0
+      - name: Create or update release (with assets)
+        if: needs.prepare.outputs.should_build == 'true'
+        uses: softprops/action-gh-release@v3
         with:
-          tag_name: ${{ steps.release_tag.outputs.TAG }}
-          name: Rust Browser Handler v${{ steps.release_tag.outputs.VERSION }}
+          tag_name: ${{ needs.prepare.outputs.tag }}
+          name: Rust Browser Handler v${{ needs.prepare.outputs.version }}
           draft: false
           prerelease: false
+          overwrite_files: true
           files: |
             artifacts/rust_browser_handler_windows/rust_browser_handler_windows.zip
             artifacts/rust_browser_handler_linux/rust_browser_handler_linux.tar.gz
-          body: |
-            # Rust Browser Handler v${{ steps.release_tag.outputs.VERSION }}
+          body: ${{ env.RELEASE_BODY }}
 
-            ## Installation
-
-            ### Windows (Portable)
-            1. Download `rust_browser_handler_windows.zip`
-            2. **Extract to a permanent location** (recommended: `C:\Program Files\RustBrowserHandler\`)
-            3. Execute `rust_browser_handler.exe register` to register as the default browser handler
-            4. Use the `open-settings` command to verify registration or access Windows Default Apps settings
-
-            ### Linux (Portable)
-            1. Download `rust_browser_handler_linux.tar.gz`
-            2. **Extract to a permanent location** (recommended: `~/bin/` or `/usr/local/bin/`)
-            3. Execute `./rust_browser_handler register` to register as the default browser handler
-            4. The application will integrate with your desktop environment using XDG standards
-
-            ## Features
-            - Cross-platform browser handler (Windows registry + Linux XDG integration)
-            - Rule-based URL routing
-            - Interactive browser selection
-            - Command-line interface
-
-            ## Supported Platforms
-            - **Windows**: Full registry-based default handler integration
-            - **Linux**: XDG desktop integration (works with GNOME, KDE, XFCE, and other desktop environments)
+      - name: Create or update release (metadata only)
+        if: needs.prepare.outputs.should_build != 'true'
+        uses: softprops/action-gh-release@v3
+        with:
+          tag_name: ${{ needs.prepare.outputs.tag }}
+          name: Rust Browser Handler v${{ needs.prepare.outputs.version }}
+          draft: false
+          prerelease: false
+          body: ${{ env.RELEASE_BODY }}
