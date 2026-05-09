@@ -131,7 +131,7 @@ jobs:
           tar -czf rust_browser_handler_${{ matrix.name }}.tar.gz -C rust_browser_handler_portable .
 
       - name: Upload artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v4.6.2
         with:
           name: rust_browser_handler_${{ matrix.name }}
           path: rust_browser_handler_${{ matrix.name }}.*
@@ -190,7 +190,7 @@ jobs:
 
       - name: Download all artifacts
         if: needs.prepare.outputs.should_build == 'true'
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v4.3.0
         with:
           path: artifacts
 
