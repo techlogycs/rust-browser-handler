@@ -41,7 +41,7 @@ Each rule is a JSON object with the following fields:
 - `browser` (string): The path or identifier of the browser to use.
 - `is_regex` (boolean, optional): If `true`, the `pattern` is treated as a regular expression. If omitted or `false`, the pattern is matched as a substring.
 
-**Example `rules.json`:**
+**Example `rules.json` (Linux):**
 ```json
 [
   {
@@ -51,6 +51,21 @@ Each rule is a JSON object with the following fields:
   {
     "pattern": ".*\\.internal\\.net",
     "browser": "/usr/bin/firefox",
+    "is_regex": true
+  }
+]
+```
+
+**Example `rules.json` (Windows):**
+```json
+[
+  {
+    "pattern": "work.com",
+    "browser": "C:/Program Files/Google/Chrome/Application/chrome.exe"
+  },
+  {
+    "pattern": ".*\\.internal\\.net",
+    "browser": "C:/Program Files/Mozilla Firefox/firefox.exe",
     "is_regex": true
   }
 ]
