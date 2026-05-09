@@ -460,14 +460,16 @@ impl PlatformHandler for LinuxHandler {
         let http_default = query_default("x-scheme-handler/http");
         let https_default = query_default("x-scheme-handler/https");
 
-        if let Ok(default) = &http_default
-            && default != "rust-browser-handler.desktop"
-        {
+        if matches!(
+            http_default.as_deref(),
+            Ok(default) if default != "rust-browser-handler.desktop"
+        ) {
             return false;
         }
-        if let Ok(default) = &https_default
-            && default != "rust-browser-handler.desktop"
-        {
+        if matches!(
+            https_default.as_deref(),
+            Ok(default) if default != "rust-browser-handler.desktop"
+        ) {
             return false;
         }
 

@@ -1,6 +1,7 @@
 use crate::browser_discovery::get_browser_name_from_path;
 use log::{error, warn};
 use slint::{ComponentHandle, ModelRc, SharedString, VecModel};
+use std::collections::HashMap;
 
 const BROWSER_CHOOSER_TITLE: &str = "Choose Browser";
 const BROWSER_CHOOSER_PROMPT: &str = "Select a browser to open:";
@@ -86,9 +87,9 @@ pub fn prompt_browser_selection_slint(url: &str, browsers: &[String]) -> GuiChoo
     dialog.set_remember_choice_text(SharedString::from(BROWSER_CHOOSER_REMEMBER_CHOICE));
     dialog.set_cancel_text(SharedString::from(BROWSER_CHOOSER_CANCEL));
 
-    let browser_names: Vec<SharedString> = browsers
-        .iter()
-        .map(|browser_path| SharedString::from(browser_display_name(browser_path, browsers)))
+    let browser_names: Vec<SharedString> = browser_display_names(browsers)
+        .into_iter()
+        .map(SharedString::from)
         .collect();
 
     dialog.set_url(SharedString::from(url));
@@ -150,16 +151,26 @@ pub fn prompt_browser_selection_slint(url: &str, browsers: &[String]) -> GuiChoo
         .unwrap_or(GuiChooserOutcome::Cancelled)
 }
 
-fn browser_display_name(browser_path: &str, browsers: &[String]) -> String {
-    let browser_name = get_browser_name_from_path(browser_path);
-    let duplicate_count = browsers
+fn browser_display_names(browsers: &[String]) -> Vec<String> {
+    let derived_names: Vec<String> = browsers
         .iter()
-        .filter(|candidate_path| get_browser_name_from_path(candidate_path) == browser_name)
-        .count();
+        .map(|browser_path| get_browser_name_from_path(browser_path))
+        .collect();
 
-    if duplicate_count > 1 {
-        format!("{} ({})", browser_name, browser_path)
-    } else {
-        browser_name
+    let mut counts: HashMap<String, usize> = HashMap::new();
+    for name in &derived_names {
+        *counts.entry(name.clone()).or_insert(0) += 1;
     }
+
+    browsers
+        .iter()
+        .zip(derived_names)
+        .map(|(browser_path, browser_name)| {
+            if counts.get(browser_name.as_str()).copied().unwrap_or(0) > 1 {
+                format!("{} ({})", browser_name, browser_path)
+            } else {
+                browser_name
+            }
+        })
+        .collect()
 }

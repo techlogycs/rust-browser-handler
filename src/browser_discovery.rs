@@ -70,6 +70,8 @@ fn normalize_fallback(path: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::fs;
+    use std::time::{SystemTime, UNIX_EPOCH};
 
     #[test]
     fn test_get_browser_name_from_path() {
@@ -94,10 +96,35 @@ mod tests {
             normalize_path("C:\\Program Files\\Google\\Chrome\\Application\\chrome"),
             "C:/Program Files/Google/Chrome/Application/chrome".to_string()
         );
-        assert_eq!(
-            normalize_path("/usr/bin/firefox"),
-            "/usr/bin/firefox".to_string()
+
+        let unique = format!(
+            "rbh-normalize-{}-{}",
+            std::process::id(),
+            SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .expect("system clock is before UNIX_EPOCH")
+                .as_nanos()
         );
+        let temp_root = std::env::temp_dir().join(unique);
+        let nested_dir = temp_root.join("nested");
+        fs::create_dir_all(&nested_dir).expect("failed to create temp test directory");
+        let file_path = nested_dir.join("browser-bin");
+        fs::write(&file_path, b"test").expect("failed to create temp test file");
+
+        let synthetic_with_dot_segments = nested_dir.join("..").join("nested/browser-bin");
+        let expected = file_path
+            .canonicalize()
+            .expect("failed to canonicalize expected path")
+            .to_string_lossy()
+            .replace('\\', "/");
+
+        assert_eq!(
+            normalize_path(&synthetic_with_dot_segments.to_string_lossy()),
+            expected
+        );
+
+        let _ = fs::remove_dir_all(&temp_root);
+
         assert_eq!(
             normalize_path("C:/not_a_browser.txt/"),
             "C:/not_a_browser.txt".to_string()

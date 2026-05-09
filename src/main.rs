@@ -621,6 +621,11 @@ fn doctor_cmd() {
     println!("\nDesktop URL handler diagnostics");
     println!("==============================\n");
 
+    match std::env::current_exe() {
+        Ok(exe) => println!("Current executable: {}", exe.to_string_lossy()),
+        Err(e) => eprintln!("warning: Failed to determine current executable: {}", e),
+    }
+
     // Check desktop file
     if let Some(data_dir) = dirs::data_dir() {
         let desktop_file = data_dir.join("applications/rust-browser-handler.desktop");
@@ -688,17 +693,24 @@ fn test_handler_cmd(test_url: &str) {
     println!("\nTesting handler invocation chain");
     println!("================================\n");
 
-    let exe = std::env::current_exe().expect("Failed to get executable path");
-    println!("[1] Direct binary execution (no URL open):");
-    match Command::new(&exe).arg("doctor").output() {
-        Ok(output) => {
-            if output.status.success() {
-                println!("  ✓ Binary executed successfully");
-            } else {
-                println!("  ✗ Binary failed with exit code {}", output.status);
+    match std::env::current_exe() {
+        Ok(exe) => {
+            println!("[1] Direct binary execution (no URL open):");
+            match Command::new(&exe).arg("doctor").output() {
+                Ok(output) => {
+                    if output.status.success() {
+                        println!("  ✓ Binary executed successfully");
+                    } else {
+                        println!("  ✗ Binary failed with exit code {}", output.status);
+                    }
+                }
+                Err(e) => println!("  ✗ Error: {}", e),
             }
         }
-        Err(e) => println!("  ✗ Error: {}", e),
+        Err(e) => {
+            println!("[1] Direct binary execution (no URL open):");
+            println!("  ✗ Skipped: failed to determine executable path ({})", e);
+        }
     }
 
     println!("\n[2] xdg-open invocation:");
