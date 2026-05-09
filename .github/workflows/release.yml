@@ -34,6 +34,17 @@ jobs:
 
           if [[ "${GITHUB_EVENT_NAME}" == "workflow_dispatch" ]]; then
             version='${{ github.event.inputs.version }}'
+
+            if [[ -z "${version}" ]]; then
+              echo "Error: version input is required when triggering via workflow_dispatch." >&2
+              exit 1
+            fi
+
+            if ! [[ "${version}" =~ ^[0-9]+\.[0-9]+\.[0-9]+([.-][0-9A-Za-z]+)*$ ]]; then
+              echo "Error: invalid version '${version}' provided via workflow_dispatch; expected semver-like value (e.g. 1.2.3 or 1.2.3-beta.1)." >&2
+              exit 1
+            fi
+
             tag="v${version}"
           else
             tag="${GITHUB_REF#refs/tags/}"
