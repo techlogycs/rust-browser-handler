@@ -90,9 +90,18 @@ mod tests {
 
     #[test]
     fn test_normalize_path() {
-        assert_eq!(normalize_path("C:\\Program Files\\Google\\Chrome\\Application\\chrome"), "C:/Program Files/Google/Chrome/Application/chrome".to_string());
-        assert_eq!(normalize_path("/usr/bin/firefox"), "/usr/bin/firefox".to_string());
-        assert_eq!(normalize_path("C:/not_a_browser.txt/"), "C:/not_a_browser.txt".to_string());
+        assert_eq!(
+            normalize_path("C:\\Program Files\\Google\\Chrome\\Application\\chrome"),
+            "C:/Program Files/Google/Chrome/Application/chrome".to_string()
+        );
+        assert_eq!(
+            normalize_path("/usr/bin/firefox"),
+            "/usr/bin/firefox".to_string()
+        );
+        assert_eq!(
+            normalize_path("C:/not_a_browser.txt/"),
+            "C:/not_a_browser.txt".to_string()
+        );
     }
 
     #[test]
@@ -102,5 +111,4 @@ mod tests {
         let normalized = normalize_path(non_existent_path);
         assert_eq!(normalized, "C:/this/path/does/not/exist".to_string());
     }
-
 }

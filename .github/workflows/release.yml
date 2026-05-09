@@ -4,6 +4,12 @@ on:
   push:
     tags:
       - 'v*'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Semver release version without the leading v'
+        required: true
+        type: string
 
 permissions:
   contents: write
@@ -74,27 +80,49 @@ jobs:
     needs: build
     runs-on: ubuntu-latest
     steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Determine release tag
+        id: release_tag
+        shell: bash
+        run: |
+          if [[ "$GITHUB_EVENT_NAME" == "workflow_dispatch" ]]; then
+            version='${{ github.event.inputs.version }}'
+            tag="v${version}"
+
+            git config user.name "github-actions[bot]"
+            git config user.email "github-actions[bot]@users.noreply.github.com"
+            git tag -a "$tag" -m "Release $tag"
+            git push origin "$tag"
+          else
+            tag="${GITHUB_REF#refs/tags/}"
+            version="${tag#v}"
+          fi
+
+          echo "TAG=$tag" >> "$GITHUB_OUTPUT"
+          echo "VERSION=$version" >> "$GITHUB_OUTPUT"
+
       - name: Download all artifacts
         uses: actions/download-artifact@v4
         with:
           path: artifacts
 
-      - name: Get version from tag
-        id: get_version
-        run: echo "VERSION=${GITHUB_REF#refs/tags/v}" >> "$GITHUB_OUTPUT"
-
       - name: Create Release
         id: create_release
         uses: softprops/action-gh-release@v1.10.0
         with:
-          name: Rust Browser Handler v${{ steps.get_version.outputs.VERSION }}
+          tag_name: ${{ steps.release_tag.outputs.TAG }}
+          name: Rust Browser Handler v${{ steps.release_tag.outputs.VERSION }}
           draft: false
           prerelease: false
           files: |
             artifacts/rust_browser_handler_windows/rust_browser_handler_windows.zip
             artifacts/rust_browser_handler_linux/rust_browser_handler_linux.tar.gz
           body: |
-            # Rust Browser Handler v${{ steps.get_version.outputs.VERSION }}
+            # Rust Browser Handler v${{ steps.release_tag.outputs.VERSION }}
 
             ## Installation
 

@@ -1,3 +1,6 @@
+[env]
+RUST_FONTCONFIG_DLOPEN = "1"
+
 [alias]
 # Set up development environment
 setup-dev = "run --manifest-path .cargo/setup-dev/Cargo.toml --bin setup-dev"
