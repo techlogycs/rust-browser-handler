@@ -48,6 +48,8 @@ jobs:
 
           should_build="true"
           if [[ "${http_code}" == "200" ]]; then
+            # Python exit code drives shell branching:
+            # 0 => assets complete (skip build), 1 => assets missing (build needed).
             if RELEASE_JSON_PATH="${release_json_path}" python - <<'PY'
 import json
 import os
@@ -142,7 +144,7 @@ PY
   release:
     name: Create Release
     needs: [prepare, build]
-    if: always() && needs.prepare.result == 'success' && (needs.build.result == 'success' || needs.build.result == 'skipped')
+    if: !cancelled() && needs.prepare.result == 'success' && (needs.build.result == 'success' || needs.build.result == 'skipped')
     runs-on: ubuntu-latest
     env:
       RELEASE_BODY: |
